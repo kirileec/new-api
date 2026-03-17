@@ -838,6 +838,62 @@ func CreateUser(c *gin.Context) {
 	return
 }
 
+// CreateUserWithEmail 创建用户（邮箱必填）
+// 与 CreateUser 不同，此方法强制要求邮箱字段，创建后用户直接拥有邮箱地址
+func CreateUserWithEmail(c *gin.Context) {
+	var user model.User
+	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	user.Username = strings.TrimSpace(user.Username)
+	user.Email = strings.TrimSpace(user.Email)
+	if err != nil || user.Username == "" || user.Password == "" || user.Email == "" {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := common.Validate.Struct(&user); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
+		return
+	}
+	if user.DisplayName == "" {
+		user.DisplayName = user.Username
+	}
+	myRole := c.GetInt("role")
+	if user.Role >= myRole {
+		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
+		return
+	}
+
+	// 检查用户名或邮箱是否已存在
+	exist, err := model.CheckUserExistOrDeleted(user.Username, user.Email)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		common.SysLog(fmt.Sprintf("CheckUserExistOrDeleted error: %v", err))
+		return
+	}
+	if exist {
+		common.ApiErrorI18n(c, i18n.MsgUserExists)
+		return
+	}
+
+	// 创建用户，包含邮箱字段
+	cleanUser := model.User{
+		Username:    user.Username,
+		Password:    user.Password,
+		DisplayName: user.DisplayName,
+		Email:       user.Email, // 直接设置邮箱
+		Role:        user.Role,
+	}
+	if err := cleanUser.Insert(0); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+	return
+}
+
 type ManageRequest struct {
 	Id     int    `json:"id"`
 	Action string `json:"action"`
