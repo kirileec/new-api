@@ -130,6 +130,9 @@ topup.order_not_exists: "充值订单不存在"
 topup.order_status: "充值订单状态错误"
 topup.failed: "充值失败，请稍后重试"
 topup.invalid_quota: "无效的充值额度"
+topup.user_not_exists: "用户不存在"
+topup.quota_must_positive: "充值额度必须大于0"
+topup.admin_success: "管理员充值成功"
 
 # Channel messages
 channel.not_exists: "渠道不存在"

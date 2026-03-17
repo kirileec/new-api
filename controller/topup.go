@@ -410,3 +410,51 @@ func AdminCompleteTopUp(c *gin.Context) {
 	}
 	common.ApiSuccess(c, nil)
 }
+
+type AdminTopUpUserRequest struct {
+	UserId int    `json:"user_id" binding:"required"`
+	Quota  int    `json:"quota" binding:"required"`
+	Remark string `json:"remark"`
+}
+
+// AdminTopUpUser 管理员直接为指定用户充值余额
+func AdminTopUpUser(c *gin.Context) {
+	var req AdminTopUpUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+
+	if req.Quota <= 0 {
+		common.ApiErrorMsg(c, "充值额度必须大于0")
+		return
+	}
+
+	// 检查用户是否存在
+	user, err := model.GetUserById(req.UserId, false)
+	if err != nil {
+		common.ApiErrorMsg(c, "用户不存在")
+		return
+	}
+
+	// 增加用户余额
+	err = model.IncreaseUserQuota(req.UserId, req.Quota, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// 记录日志
+	adminId := c.GetInt("id")
+	logContent := fmt.Sprintf("管理员(ID:%d)为用户(ID:%d, 用户名:%s)充值余额: %s", adminId, req.UserId, user.Username, logger.LogQuota(req.Quota))
+	if req.Remark != "" {
+		logContent += fmt.Sprintf("，备注: %s", req.Remark)
+	}
+	model.RecordLog(req.UserId, model.LogTypeTopup, logContent)
+
+	common.ApiSuccess(c, gin.H{
+		"user_id":       req.UserId,
+		"quota_added":   req.Quota,
+		"current_quota": user.Quota + req.Quota,
+	})
+}
