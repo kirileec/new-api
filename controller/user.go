@@ -316,6 +316,66 @@ func GenerateAccessToken(c *gin.Context) {
 	return
 }
 
+// AdminCreateUserAccessToken 管理员为特定用户创建访问令牌
+// 如果用户已有访问令牌则不创建，直接返回现有令牌
+func AdminCreateUserAccessToken(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	user, err := model.GetUserById(userId, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// 如果用户已有访问令牌，直接返回
+	if user.AccessToken != nil && *user.AccessToken != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "用户已有访问令牌",
+			"data": gin.H{
+				"user_id":       user.Id,
+				"access_token":  user.GetAccessToken(),
+				"already_exist": true,
+			},
+		})
+		return
+	}
+
+	// 生成新的访问令牌
+	randI := common.GetRandomInt(4)
+	key, err := common.GenerateRandomKey(29 + randI)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgGenerateFailed)
+		common.SysLog("failed to generate key: " + err.Error())
+		return
+	}
+	user.SetAccessToken(key)
+
+	if model.DB.Where("access_token = ?", user.AccessToken).First(user).RowsAffected != 0 {
+		common.ApiErrorI18n(c, i18n.MsgUuidDuplicate)
+		return
+	}
+
+	if err := user.Update(false); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"user_id":       user.Id,
+			"access_token":  user.GetAccessToken(),
+			"already_exist": false,
+		},
+	})
+}
+
 type TransferAffQuotaRequest struct {
 	Quota int `json:"quota" binding:"required"`
 }
